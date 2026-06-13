@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"os"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -116,7 +117,10 @@ func main() {
 		return c.JSON(fiber.Map{"status": "OK", "database": "OK"})
 	})
 
-	port := "8080"
+	port := os.Getenv("APP_PORT")
+	if port == "" {
+		port = "8001"
+	}
 	log.Printf("Server listening on port %s", port)
 	log.Fatal(app.Listen(":" + port))
 }
