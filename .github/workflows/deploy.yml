@@ -42,7 +42,8 @@ jobs:
         run: |
           cd frontend
           cat <<EOF > .env
-          VITE_API_URL=${{ secrets.VITE_API_URL }}
+          VITE_API_URL=${{ vars.VITE_API_URL }}
+          VITE_PORT=${{ vars.VITE_PORT }}
           EOF
           npm install
           npm run build
@@ -50,13 +51,21 @@ jobs:
       - name: Generate Backend .env
         run: |
           cat <<EOF > backend/.env
-          DB_HOST=${{ secrets.DB_HOST }}
-          DB_PORT=${{ secrets.DB_PORT }}
+          DB_HOST=${{ vars.DB_HOST }}
+          DB_PORT=${{ vars.DB_PORT }}
           DB_USER=${{ secrets.DB_USER }}
           DB_PASSWORD=${{ secrets.DB_PASSWORD }}
-          DB_NAME=${{ secrets.DB_NAME }}
+          DB_NAME=${{ vars.DB_NAME }}
           JWT_SECRET=${{ secrets.JWT_SECRET }}
-          APP_PORT=${{ secrets.APP_PORT || '8001' }}
+          APP_PORT=${{ vars.APP_PORT || '8001' }}
+          EOF
+
+      - name: Generate Agent .env
+        run: |
+          mkdir -p agent
+          cat <<EOF > agent/.env
+          API_URL=${{ vars.API_URL }}
+          API_KEY=${{ secrets.AGENT_API_KEY }}
           EOF
 
       # 3. Copy Files to VPS via SCP
@@ -67,7 +76,7 @@ jobs:
           username: ${{ secrets.VPS_USERNAME }}
           password: ${{ secrets.VPS_PASSWORD }}
           port: ${{ secrets.VPS_PORT || 22 }}
-          source: "backend/server_bin,backend/.env,agent/agent_bin,frontend/dist/"
+          source: "backend/server_bin,backend/.env,agent/agent_bin,agent/.env,frontend/dist/"
           target: "/opt/server-monitoring"
           strip_components: 0
 
@@ -85,9 +94,8 @@ jobs:
             chmod +x agent/agent_bin
 
 
-            if [ ! -f /etc/systemd/system/backend-monitoring.service ]; then
-              echo "create backend-monitoring.service..."
-              sudo bash -c 'cat <<EOF > /etc/systemd/system/backend-monitoring.service
+            echo "Mengupdate backend-monitoring.service..."
+            sudo bash -c 'cat <<EOF > /etc/systemd/system/backend-monitoring.service
             [Unit]
             Description=Backend Monitoring Service
             After=network.target
@@ -96,20 +104,18 @@ jobs:
             Type=simple
             User=root
             WorkingDirectory=/opt/server-monitoring/backend
+            EnvironmentFile=/opt/server-monitoring/backend/.env
             ExecStart=/opt/server-monitoring/backend/server_bin
             Restart=always
 
             [Install]
             WantedBy=multi-user.target
             EOF'
-              sudo systemctl daemon-reload
-              sudo systemctl enable backend-monitoring.service
-            fi
+            sudo systemctl daemon-reload
+            sudo systemctl enable backend-monitoring.service
 
-
-            if [ ! -f /etc/systemd/system/agent-monitoring.service ]; then
-              echo "create agent-monitoring.service..."
-              sudo bash -c 'cat <<EOF > /etc/systemd/system/agent-monitoring.service
+            echo "Mengupdate agent-monitoring.service..."
+            sudo bash -c 'cat <<EOF > /etc/systemd/system/agent-monitoring.service
             [Unit]
             Description=Agent Monitoring Service
             After=network.target
@@ -118,15 +124,15 @@ jobs:
             Type=simple
             User=root
             WorkingDirectory=/opt/server-monitoring/agent
+            EnvironmentFile=/opt/server-monitoring/agent/.env
             ExecStart=/opt/server-monitoring/agent/agent_bin
             Restart=always
 
             [Install]
             WantedBy=multi-user.target
             EOF'
-              sudo systemctl daemon-reload
-              sudo systemctl enable agent-monitoring.service
-            fi
+            sudo systemctl daemon-reload
+            sudo systemctl enable agent-monitoring.service
 
             # 3. Restart kedua service
             sudo systemctl restart backend-monitoring
