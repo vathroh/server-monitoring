@@ -3,7 +3,7 @@ name: Deploy to VPS
 on:
   push:
     branches:
-      - main # Jalankan workflow saat ada push ke branch main
+      - master
 
 jobs:
   build-and-deploy:
