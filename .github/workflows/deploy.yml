@@ -44,6 +44,17 @@ jobs:
           npm install
           npm run build
 
+      - name: Generate Backend .env
+        run: |
+          cat <<EOF > backend/.env
+          DB_HOST=${{ secrets.DB_HOST }}
+          DB_PORT=${{ secrets.DB_PORT }}
+          DB_USER=${{ secrets.DB_USER }}
+          DB_PASSWORD=${{ secrets.DB_PASSWORD }}
+          DB_NAME=${{ secrets.DB_NAME }}
+          JWT_SECRET=${{ secrets.JWT_SECRET }}
+          EOF
+
       # 3. Copy Files to VPS via SCP
       - name: Copy files to VPS
         uses: appleboy/scp-action@master
@@ -52,7 +63,7 @@ jobs:
           username: ${{ secrets.VPS_USERNAME }}
           password: ${{ secrets.VPS_PASSWORD }}
           port: ${{ secrets.VPS_PORT || 22 }}
-          source: "backend/server_bin,agent/agent_bin,frontend/dist/"
+          source: "backend/server_bin,backend/.env,agent/agent_bin,frontend/dist/"
           target: "/opt/server-monitoring"
           strip_components: 0
 
@@ -65,12 +76,54 @@ jobs:
           password: ${{ secrets.VPS_PASSWORD }}
           port: ${{ secrets.VPS_PORT || 22 }}
           script: |
-            # Pindah ke direktori project
             cd /opt/server-monitoring
-
-            # Berikan izin eksekusi untuk binary Go
             chmod +x backend/server_bin
             chmod +x agent/agent_bin
 
+
+            if [ ! -f /etc/systemd/system/backend-monitoring.service ]; then
+              echo "create backend-monitoring.service..."
+              sudo bash -c 'cat <<EOF > /etc/systemd/system/backend-monitoring.service
+            [Unit]
+            Description=Backend Monitoring Service
+            After=network.target
+
+            [Service]
+            Type=simple
+            User=root
+            WorkingDirectory=/opt/server-monitoring/backend
+            ExecStart=/opt/server-monitoring/backend/server_bin
+            Restart=always
+
+            [Install]
+            WantedBy=multi-user.target
+            EOF'
+              sudo systemctl daemon-reload
+              sudo systemctl enable backend-monitoring.service
+            fi
+
+
+            if [ ! -f /etc/systemd/system/agent-monitoring.service ]; then
+              echo "create agent-monitoring.service..."
+              sudo bash -c 'cat <<EOF > /etc/systemd/system/agent-monitoring.service
+            [Unit]
+            Description=Agent Monitoring Service
+            After=network.target
+
+            [Service]
+            Type=simple
+            User=root
+            WorkingDirectory=/opt/server-monitoring/agent
+            ExecStart=/opt/server-monitoring/agent/agent_bin
+            Restart=always
+
+            [Install]
+            WantedBy=multi-user.target
+            EOF'
+              sudo systemctl daemon-reload
+              sudo systemctl enable agent-monitoring.service
+            fi
+
+            # 3. Restart kedua service
             sudo systemctl restart backend-monitoring
             sudo systemctl restart agent-monitoring
