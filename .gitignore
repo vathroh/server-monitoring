@@ -1,0 +1,36 @@
+# General
+.DS_Store
+.vscode/
+.idea/
+*.log
+
+# Environment Variables
+.env
+.env.*
+
+# Docker Database Data
+data/
+db-data/
+
+# Backend (Go)
+/backend/bin/
+/backend/tmp/
+/backend/server
+/backend/main
+/backend/*.exe
+
+# Frontend (Node / React)
+node_modules/
+/frontend/node_modules/
+/frontend/dist/
+/frontend/build/
+/frontend/.eslintcache
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Agent & AI Tools
+.agents/
+.gemini/
+
+.local

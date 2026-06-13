@@ -1,0 +1,76 @@
+name: Deploy to VPS
+
+on:
+  push:
+    branches:
+      - main # Jalankan workflow saat ada push ke branch main
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # 1. Setup & Build Go (Backend & Agent)
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22" # Sesuaikan dengan versi Go Anda
+
+      - name: Build Backend
+        run: |
+          cd backend
+          go mod download
+          # Build executable untuk OS Linux
+          GOOS=linux GOARCH=amd64 go build -o server_bin ./cmd/server/main.go
+
+      - name: Build Agent
+        run: |
+          cd agent
+          go mod download
+          GOOS=linux GOARCH=amd64 go build -o agent_bin ./main.go
+
+      # 2. Setup & Build Node.js (Frontend)
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20" # Sesuaikan dengan versi Node Anda
+
+      - name: Build Frontend
+        run: |
+          cd frontend
+          npm install
+          npm run build
+
+      # 3. Copy Files to VPS via SCP
+      - name: Copy files to VPS
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USERNAME }}
+          password: ${{ secrets.VPS_PASSWORD }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          source: "backend/server_bin,agent/agent_bin,frontend/dist/"
+          target: "/opt/server-monitoring"
+          strip_components: 0
+
+      # 4. Restart Services via SSH
+      - name: Restart Services on VPS
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USERNAME }}
+          password: ${{ secrets.VPS_PASSWORD }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          script: |
+            # Pindah ke direktori project
+            cd /opt/server-monitoring
+
+            # Berikan izin eksekusi untuk binary Go
+            chmod +x backend/server_bin
+            chmod +x agent/agent_bin
+
+            sudo systemctl restart backend-monitoring
+            sudo systemctl restart agent-monitoring
